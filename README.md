@@ -17,4 +17,4 @@ Pre-requisites and limitation
 
 Screenshots
 -----------
-<img src="screenshots/fingerprint-system-ui-pixel-2.png" height="400" alt="Screenshot"/>
+<img src="screenshot/fingerprint-system-ui-pixel-2.png" height="400" alt="Screenshot"/>
