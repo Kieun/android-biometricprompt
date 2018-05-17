@@ -7,10 +7,10 @@
         <item
             android:id="@+id/nav_register"
             android:icon="@drawable/ic_menu_camera"
-            android:title="Import" />
+            android:title="Register" />
         <item
             android:id="@+id/nav_authenticate"
             android:icon="@drawable/ic_menu_gallery"
-            android:title="Gallery" />
+            android:title="Authenticate" />
     </group>
 </menu>
