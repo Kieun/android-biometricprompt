@@ -116,6 +116,10 @@ public class MainActivity extends AppCompatActivity
                 try {
                     // Before generating a key pair, we have to check enrollment of biometrics on the device
                     // But, there is no such method on new biometric prompt API
+
+                    // Note that this method will throw an exception if there is no enrolled biometric on the device
+                    // This issue is reported to Android issue tracker
+                    // https://issuetracker.google.com/issues/112495828
                     KeyPair keyPair = generateKeyPair(KEY_NAME, true);
                     // Send public key part of key pair to the server, this public key will be used for authentication
                     mToBeSignedMessage = new StringBuilder()
@@ -282,6 +286,7 @@ public class MainActivity extends AppCompatActivity
                         KeyProperties.DIGEST_SHA512)
                 // Require the user to authenticate with a biometric to authorize every use of the key
                 .setUserAuthenticationRequired(true)
+                // Generated keys will be invalidated if the biometric templates are added more to user device
                 .setInvalidatedByBiometricEnrollment(invalidatedByBiometricEnrollment);
 
         keyPairGenerator.initialize(builder.build());
