@@ -1,8 +1,10 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24.0"
-    android:viewportHeight="24.0">
+    android:viewportHeight="24.0"
+    tools:keep="@drawable/ic_menu_send">
     <path
         android:fillColor="#FF000000"
         android:pathData="M2.01,21L23,12 2.01,3 2,10l15,2 -15,2z" />

@@ -1,10 +1,11 @@
 package com.example.kieun.biometricprompt;
 
-import android.content.DialogInterface;
-import android.content.pm.PackageManager;
-import android.hardware.biometrics.BiometricPrompt;
+import android.annotation.SuppressLint;
+import android.hardware.biometrics.BiometricManager;
+import android.os.Build;
 import android.os.Bundle;
-import android.os.CancellationSignal;
+import android.os.Handler;
+import android.os.Looper;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
@@ -13,6 +14,16 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.ActionBarDrawerToggle;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+import androidx.biometric.BiometricPrompt;
+import androidx.core.hardware.fingerprint.FingerprintManagerCompat;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
@@ -26,33 +37,28 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.spec.ECGenParameterSpec;
-
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.ActionBarDrawerToggle;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
-import androidx.core.view.GravityCompat;
-import androidx.drawerlayout.widget.DrawerLayout;
+import java.util.UUID;
+import java.util.concurrent.Executor;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
     private static final String TAG = MainActivity.class.getName();
 
-    private BiometricPrompt mBiometricPrompt;
     private String mToBeSignedMessage;
 
     // Unique identifier of a key pair
-    private static final String KEY_NAME = "test";
+    private static final String KEY_NAME = UUID.randomUUID().toString();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
+        FloatingActionButton fab = findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
+            @SuppressLint("WrongConstant")
             @Override
             public void onClick(View view) {
                 Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
@@ -60,19 +66,19 @@ public class MainActivity extends AppCompatActivity
             }
         });
 
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        DrawerLayout drawer = findViewById(R.id.drawer_layout);
         ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
                 this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
         drawer.addDrawerListener(toggle);
         toggle.syncState();
 
-        NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
+        NavigationView navigationView = findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
     }
 
     @Override
     public void onBackPressed() {
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        DrawerLayout drawer = findViewById(R.id.drawer_layout);
         if (drawer.isDrawerOpen(GravityCompat.START)) {
             drawer.closeDrawer(GravityCompat.START);
         } else {
@@ -102,34 +108,25 @@ public class MainActivity extends AppCompatActivity
         return super.onOptionsItemSelected(item);
     }
 
-    @SuppressWarnings("StatementWithEmptyBody")
     @Override
     public boolean onNavigationItemSelected(MenuItem item) {
         // Handle navigation view item clicks here.
         int id = item.getItemId();
 
         if (id == R.id.nav_register) {
-            if (isSupportBiometricPrompt()) {
+            if (canAuthenticateWithBiometrics()) {  // Check whether this device can authenticate with biometrics
                 Log.i(TAG, "Try registration");
                 // Generate keypair and init signature
                 Signature signature;
                 try {
-                    // Before generating a key pair, we have to check enrollment of biometrics on the device
-                    // But, there is no such method on new biometric prompt API
-
-                    // Note that this method will throw an exception if there is no enrolled biometric on the device
-                    // This issue is reported to Android issue tracker
-                    // https://issuetracker.google.com/issues/112495828
                     KeyPair keyPair = generateKeyPair(KEY_NAME, true);
                     // Send public key part of key pair to the server, this public key will be used for authentication
-                    mToBeSignedMessage = new StringBuilder()
-                            .append(Base64.encodeToString(keyPair.getPublic().getEncoded(), Base64.URL_SAFE))
-                            .append(":")
-                            .append(KEY_NAME)
-                            .append(":")
+                    mToBeSignedMessage = Base64.encodeToString(keyPair.getPublic().getEncoded(), Base64.URL_SAFE) +
+                            ":" +
+                            KEY_NAME +
+                            ":" +
                             // Generated by the server to protect against replay attack
-                            .append("12345")
-                            .toString();
+                            "12345";
 
                     signature = initSignature(KEY_NAME);
                 } catch (Exception e) {
@@ -137,113 +134,88 @@ public class MainActivity extends AppCompatActivity
                 }
 
                 // Create biometricPrompt
-                mBiometricPrompt = new BiometricPrompt.Builder(this)
-                        .setDescription("Description")
-                        .setTitle("Title")
-                        .setSubtitle("Subtitle")
-                        .setNegativeButton("Cancel", getMainExecutor(), new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialogInterface, int i) {
-                                Log.i(TAG, "Cancel button clicked");
-                            }
-                        })
-                        .build();
-                CancellationSignal cancellationSignal = getCancellationSignal();
-                BiometricPrompt.AuthenticationCallback authenticationCallback = getAuthenticationCallback();
-
-                // Show biometric prompt
-                if (signature != null) {
-                    Log.i(TAG, "Show biometric prompt");
-                    mBiometricPrompt.authenticate(new BiometricPrompt.CryptoObject(signature), cancellationSignal, getMainExecutor(), authenticationCallback);
-                }
+                showBiometricPrompt(signature);
+            } else {
+                // Cannot use biometric prompt
+                Toast.makeText(this, "Cannot use biometric", Toast.LENGTH_SHORT).show();
             }
         } else if (id == R.id.nav_authenticate) {
-            if (isSupportBiometricPrompt()) {
+            if (canAuthenticateWithBiometrics()) {  // Check whether this device can authenticate with biometrics
                 Log.i(TAG, "Try authentication");
 
                 // Init signature
                 Signature signature;
                 try {
                     // Send key name and challenge to the server, this message will be verified with registered public key on the server
-                    mToBeSignedMessage = new StringBuilder()
-                            .append(KEY_NAME)
-                            .append(":")
+                    mToBeSignedMessage = KEY_NAME +
+                            ":" +
                             // Generated by the server to protect against replay attack
-                            .append("12345")
-                            .toString();
+                            "12345";
                     signature = initSignature(KEY_NAME);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
 
                 // Create biometricPrompt
-                mBiometricPrompt = new BiometricPrompt.Builder(this)
-                        .setDescription("Description")
-                        .setTitle("Title")
-                        .setSubtitle("Subtitle")
-                        .setNegativeButton("Cancel", getMainExecutor(), new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialogInterface, int i) {
-                                Log.i(TAG, "Cancel button clicked");
-                            }
-                        })
-                        .build();
-                CancellationSignal cancellationSignal = getCancellationSignal();
-                BiometricPrompt.AuthenticationCallback authenticationCallback = getAuthenticationCallback();
-
-                // Show biometric prompt
-                if (signature != null) {
-                    Log.i(TAG, "Show biometric prompt");
-                    mBiometricPrompt.authenticate(new BiometricPrompt.CryptoObject(signature), cancellationSignal, getMainExecutor(), authenticationCallback);
-                }
+                showBiometricPrompt(signature);
+            } else {
+                // Cannot use biometric prompt
+                Toast.makeText(this, "Cannot use biometric", Toast.LENGTH_SHORT).show();
             }
         }
 
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        DrawerLayout drawer = findViewById(R.id.drawer_layout);
         drawer.closeDrawer(GravityCompat.START);
         return true;
     }
 
-    private CancellationSignal getCancellationSignal() {
-        // With this cancel signal, we can cancel biometric prompt operation
-        CancellationSignal cancellationSignal = new CancellationSignal();
-        cancellationSignal.setOnCancelListener(new CancellationSignal.OnCancelListener() {
-            @Override
-            public void onCancel() {
-                //handle cancel result
-                Log.i(TAG, "Canceled");
-            }
-        });
-        return cancellationSignal;
+    private void showBiometricPrompt(Signature signature) {
+        BiometricPrompt.AuthenticationCallback authenticationCallback = getAuthenticationCallback();
+        BiometricPrompt mBiometricPrompt = new BiometricPrompt(this, getMainThreadExecutor(), authenticationCallback);
+
+        // Set prompt info
+        BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
+                .setDescription("Description")
+                .setTitle("Title")
+                .setSubtitle("Subtitle")
+                .setNegativeButtonText("Cancel")
+                .build();
+
+        // Show biometric prompt
+        if (signature != null) {
+            Log.i(TAG, "Show biometric prompt");
+            mBiometricPrompt.authenticate(promptInfo, new BiometricPrompt.CryptoObject(signature));
+        }
     }
 
     private BiometricPrompt.AuthenticationCallback getAuthenticationCallback() {
         // Callback for biometric authentication result
         return new BiometricPrompt.AuthenticationCallback() {
             @Override
-            public void onAuthenticationError(int errorCode, CharSequence errString) {
+            public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
                 super.onAuthenticationError(errorCode, errString);
             }
 
             @Override
-            public void onAuthenticationHelp(int helpCode, CharSequence helpString) {
-                super.onAuthenticationHelp(helpCode, helpString);
-            }
-
-            @Override
-            public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+            public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
                 Log.i(TAG, "onAuthenticationSucceeded");
                 super.onAuthenticationSucceeded(result);
-                Signature signature = result.getCryptoObject().getSignature();
-                try {
-                    signature.update(mToBeSignedMessage.getBytes());
-                    String signatureString = Base64.encodeToString(signature.sign(), Base64.URL_SAFE);
-                    // Normally, ToBeSignedMessage and Signature are sent to the server and then verified
-                    Log.i(TAG, "Message: " + mToBeSignedMessage);
-                    Log.i(TAG, "Signature (Base64 EncodeD): " + signatureString);
-                    Toast.makeText(getApplicationContext(), mToBeSignedMessage + ":" + signatureString, Toast.LENGTH_SHORT).show();
-                } catch (SignatureException e) {
-                    throw new RuntimeException();
+                if (result.getCryptoObject() != null &&
+                        result.getCryptoObject().getSignature() != null) {
+                    try {
+                        Signature signature = result.getCryptoObject().getSignature();
+                        signature.update(mToBeSignedMessage.getBytes());
+                        String signatureString = Base64.encodeToString(signature.sign(), Base64.URL_SAFE);
+                        // Normally, ToBeSignedMessage and Signature are sent to the server and then verified
+                        Log.i(TAG, "Message: " + mToBeSignedMessage);
+                        Log.i(TAG, "Signature (Base64 EncodeD): " + signatureString);
+                        Toast.makeText(getApplicationContext(), mToBeSignedMessage + ":" + signatureString, Toast.LENGTH_SHORT).show();
+                    } catch (SignatureException e) {
+                        throw new RuntimeException();
+                    }
+                } else {
+                    // Error
+                    Toast.makeText(getApplicationContext(), "Something wrong", Toast.LENGTH_SHORT).show();
                 }
             }
 
@@ -254,27 +226,6 @@ public class MainActivity extends AppCompatActivity
         };
     }
 
-    /**
-     * Before generating a key pair with biometric prompt, we need to check system feature to ensure that the device supports fingerprint, iris, or face.
-     * Currently, there is no FEATURE_IRIS and FEATURE_FACE constant on PackageManager
-     * So, only check FEATURE_FINGERPRINT
-     * @return
-     */
-    private boolean isSupportBiometricPrompt() {
-        PackageManager packageManager = this.getPackageManager();
-        if (packageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Generate NIST P-256 EC Key pair for signing and verification
-     * @param keyName
-     * @param invalidatedByBiometricEnrollment
-     * @return
-     * @throws Exception
-     */
     private KeyPair generateKeyPair(String keyName, boolean invalidatedByBiometricEnrollment) throws Exception {
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
 
@@ -285,9 +236,12 @@ public class MainActivity extends AppCompatActivity
                         KeyProperties.DIGEST_SHA384,
                         KeyProperties.DIGEST_SHA512)
                 // Require the user to authenticate with a biometric to authorize every use of the key
-                .setUserAuthenticationRequired(true)
-                // Generated keys will be invalidated if the biometric templates are added more to user device
-                .setInvalidatedByBiometricEnrollment(invalidatedByBiometricEnrollment);
+                .setUserAuthenticationRequired(true);
+
+        // Generated keys will be invalidated if the biometric templates are added more to user device
+        if (Build.VERSION.SDK_INT >= 24) {
+            builder.setInvalidatedByBiometricEnrollment(invalidatedByBiometricEnrollment);
+        }
 
         keyPairGenerator.initialize(builder.build());
 
@@ -319,5 +273,36 @@ public class MainActivity extends AppCompatActivity
             return signature;
         }
         return null;
+    }
+
+    private Executor getMainThreadExecutor() {
+        return new MainThreadExecutor();
+    }
+
+    private static class MainThreadExecutor implements Executor {
+        private final Handler handler = new Handler(Looper.getMainLooper());
+
+        @Override
+        public void execute(@NonNull Runnable r) {
+            handler.post(r);
+        }
+    }
+
+    /**
+     * Indicate whether this device can authenticate the user with biometrics
+     * @return true if there are any available biometric sensors and biometrics are enrolled on the device, if not, return false
+     */
+    private boolean canAuthenticateWithBiometrics() {
+        // Check whether the fingerprint can be used for authentication (Android M to P)
+        if (Build.VERSION.SDK_INT < 29) {
+            FingerprintManagerCompat fingerprintManagerCompat = FingerprintManagerCompat.from(this);
+            return fingerprintManagerCompat.hasEnrolledFingerprints() && fingerprintManagerCompat.isHardwareDetected();
+        } else {    // Check biometric manager (from Android Q)
+            BiometricManager biometricManager = this.getSystemService(BiometricManager.class);
+            if (biometricManager != null) {
+                return biometricManager.canAuthenticate() == BiometricManager.BIOMETRIC_SUCCESS;
+            }
+            return false;
+        }
     }
 }
