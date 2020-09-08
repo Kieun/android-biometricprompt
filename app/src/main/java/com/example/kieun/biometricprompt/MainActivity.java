@@ -292,6 +292,7 @@ public class MainActivity extends AppCompatActivity
      * Indicate whether this device can authenticate the user with biometrics
      * @return true if there are any available biometric sensors and biometrics are enrolled on the device, if not, return false
      */
+    @SuppressWarnings("deprecation")
     private boolean canAuthenticateWithBiometrics() {
         // Check whether the fingerprint can be used for authentication (Android M to P)
         if (Build.VERSION.SDK_INT < 29) {
