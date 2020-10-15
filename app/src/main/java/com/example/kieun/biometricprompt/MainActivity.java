@@ -1,7 +1,6 @@
 package com.example.kieun.biometricprompt;
 
 import android.annotation.SuppressLint;
-import android.hardware.biometrics.BiometricManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -20,8 +19,8 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.biometric.BiometricManager;
 import androidx.biometric.BiometricPrompt;
-import androidx.core.hardware.fingerprint.FingerprintManagerCompat;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 
@@ -114,7 +113,7 @@ public class MainActivity extends AppCompatActivity
         int id = item.getItemId();
 
         if (id == R.id.nav_register) {
-            if (canAuthenticateWithBiometrics()) {  // Check whether this device can authenticate with biometrics
+            if (canAuthenticateWithStrongBiometrics()) {  // Check whether this device can authenticate with biometrics
                 Log.i(TAG, "Try registration");
                 // Generate keypair and init signature
                 Signature signature;
@@ -140,7 +139,7 @@ public class MainActivity extends AppCompatActivity
                 Toast.makeText(this, "Cannot use biometric", Toast.LENGTH_SHORT).show();
             }
         } else if (id == R.id.nav_authenticate) {
-            if (canAuthenticateWithBiometrics()) {  // Check whether this device can authenticate with biometrics
+            if (canAuthenticateWithStrongBiometrics()) {  // Check whether this device can authenticate with biometrics
                 Log.i(TAG, "Try authentication");
 
                 // Init signature
@@ -193,6 +192,7 @@ public class MainActivity extends AppCompatActivity
         return new BiometricPrompt.AuthenticationCallback() {
             @Override
             public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                Log.e(TAG, "Error code: " + errorCode + "error String: " + errString);
                 super.onAuthenticationError(errorCode, errString);
             }
 
@@ -208,7 +208,7 @@ public class MainActivity extends AppCompatActivity
                         String signatureString = Base64.encodeToString(signature.sign(), Base64.URL_SAFE);
                         // Normally, ToBeSignedMessage and Signature are sent to the server and then verified
                         Log.i(TAG, "Message: " + mToBeSignedMessage);
-                        Log.i(TAG, "Signature (Base64 EncodeD): " + signatureString);
+                        Log.i(TAG, "Signature (Base64 Encoded): " + signatureString);
                         Toast.makeText(getApplicationContext(), mToBeSignedMessage + ":" + signatureString, Toast.LENGTH_SHORT).show();
                     } catch (SignatureException e) {
                         throw new RuntimeException();
@@ -289,21 +289,10 @@ public class MainActivity extends AppCompatActivity
     }
 
     /**
-     * Indicate whether this device can authenticate the user with biometrics
-     * @return true if there are any available biometric sensors and biometrics are enrolled on the device, if not, return false
+     * Indicate whether this device can authenticate the user with strong biometrics
+     * @return true if there are any available strong biometric sensors and biometrics are enrolled on the device, if not, return false
      */
-    @SuppressWarnings("deprecation")
-    private boolean canAuthenticateWithBiometrics() {
-        // Check whether the fingerprint can be used for authentication (Android M to P)
-        if (Build.VERSION.SDK_INT < 29) {
-            FingerprintManagerCompat fingerprintManagerCompat = FingerprintManagerCompat.from(this);
-            return fingerprintManagerCompat.hasEnrolledFingerprints() && fingerprintManagerCompat.isHardwareDetected();
-        } else {    // Check biometric manager (from Android Q)
-            BiometricManager biometricManager = this.getSystemService(BiometricManager.class);
-            if (biometricManager != null) {
-                return biometricManager.canAuthenticate() == BiometricManager.BIOMETRIC_SUCCESS;
-            }
-            return false;
-        }
+    private boolean canAuthenticateWithStrongBiometrics() {
+        return BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS;
     }
 }
